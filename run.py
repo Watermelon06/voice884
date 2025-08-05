@@ -37,9 +37,6 @@ tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzho
 os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
 
-AudioSegment.converter = os.path.join(os.path.dirname(__file__), "ffmpeg", "ffmpeg")
-print(AudioSegment.converter)
-
 
 # Создаем файл базы данных, если он не существует
 if not os.path.exists(db_path):
