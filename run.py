@@ -21,7 +21,6 @@ from sqlalchemy import BigInteger, select, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy import func
-
 from rev_ai import apiclient
 from moviepy.editor import VideoFileClip
 
@@ -30,11 +29,14 @@ API_TOKEN = '7658777452:AAHUmMy3ROkwhmJpXlzZb3p2H5HRRcoWv5c'
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
-db_path = '../data/db.sqlite3'
 tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzhoq6VZ7ZpLf4vLI4dyxYvvbHec', '02LIXJoYtq24oWGQ_-8Outb3c9C9kuOZZOF-Eg99NmlZ_-IDT5_8p0PI9OSq6_GtqSenZz0tlwSXcAYFWuS51L8O6lMBg', '02R1KhYQKOHOdva1jgHlN7qZuYFPqDpxDyaH033WYIBxJbbi4cUks79ipMe1tnbAQuyahN-LfmlsL3yAx1CinJiP5d3Ro']
 
 # Создаем папки, если они не существуют
 os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+ogg_path = os.path.join(DATA_DIR, 'add.ogg')
+db_path = os.path.join(DATA_DIR, 'db')
 
 
 
@@ -205,7 +207,7 @@ async def full_edit_tokens(message: Message):
 @dp.message(AdminProtect(), Command('get_db'))
 async def get_db(message: Message, bot: Bot):
     database = FSInputFile(
-        os.path.abspath('../data/db.sqlite3'),
+        os.path.abspath(db_path),
         filename='db.sqlite3'
     )
     await message.answer_document(database)
@@ -221,7 +223,7 @@ def transcribe_file(token: str, id_file: str, duration: int) -> str:
     global tokens
     if duration < 3:
         main_audio = AudioSegment.from_file(f'../data/{id_file}.ogg')
-        add_audio = AudioSegment.from_file('../data/add.ogg')
+        add_audio = AudioSegment.from_file(ogg_path)
         combined = main_audio + add_audio
         combined.export(f'../data/{id_file}.ogg', format='ogg')
     client = apiclient.RevAiAPIClient(token)
