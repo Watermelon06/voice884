@@ -215,25 +215,25 @@ async def get_db(message: Message, bot: Bot):
 
 async def download_file(session: aiohttp.ClientSession, file_url: str, id_file: str, file_extension: str):
     async with session.get(file_url) as response:
-        with open(f'../data/{id_file}.{file_extension}', 'wb') as file:
+        with open(f'/usr/src/app/data/{id_file}.{file_extension}', 'wb') as file:
             file.write(await response.read())
 
 
 def transcribe_file(token: str, id_file: str, duration: int) -> str:
     global tokens
     if duration < 3:
-        main_audio = AudioSegment.from_file(f'../data/{id_file}.ogg')
+        main_audio = AudioSegment.from_file(f'/usr/src/app/data/{id_file}.ogg')
         add_audio = AudioSegment.from_file(ogg_path)
         combined = main_audio + add_audio
-        combined.export(f'../data/{id_file}.ogg', format='ogg')
+        combined.export(f'/usr/src/app/data/{id_file}.ogg', format='ogg')
     client = apiclient.RevAiAPIClient(token)
     job_options = {'language': 'ru'}
-    job = client.submit_job_local_file(f'../data/{id_file}.ogg', **job_options)
+    job = client.submit_job_local_file(f'/usr/src/app/data/{id_file}.ogg', **job_options)
     while True:
         job_details = client.get_job_details(job.id)
         if job_details.status == 'transcribed':
             transcript_text = client.get_transcript_text(job.id)
-            os.remove(f'../data/{id_file}.ogg')
+            os.remove(f'/usr/src/app/data/{id_file}.ogg')
             transcript_text = re.sub(r'Speaker \d+\s+', '', transcript_text)
             return transcript_text
         if job_details.status == 'failed':
@@ -243,7 +243,7 @@ def transcribe_file(token: str, id_file: str, duration: int) -> str:
                     for i in tokens:
                         if len(i) > 2:
                             new_token = i
-                    return f'new_{tok}; tokens={tokens}'
+                    return f'new_{tok}; \n\n tokens={tokens}'
 
 
 async def download_and_transcribe(bot: Bot, file_id: str, token: str, id_file: str, file_extension: str) -> str:
@@ -254,14 +254,14 @@ async def download_and_transcribe(bot: Bot, file_id: str, token: str, id_file: s
         await download_file(session, file_path, id_file, file_extension)
 
     if file_extension == 'mp4':
-        video = VideoFileClip(f'../data/{id_file}.mp4')
-        video.audio.write_audiofile(f'../data/{id_file}.ogg')
+        video = VideoFileClip(f'/usr/src/app/data/{id_file}.mp4')
+        video.audio.write_audiofile(f'/usr/src/app/data/{id_file}.ogg')
         video.close()
-        os.remove(f'../data/{id_file}.mp4')
-    duration = get_duration_pydub(f'../data/{id_file}.ogg')
+        os.remove(f'/usr/src/app/data/{id_file}.mp4')
+    duration = get_duration_pydub(f'/usr/src/app/data/{id_file}.ogg')
     if await add_usage(id_file[:10], duration):
         await bot.send_message(chat_id='7281169403', text=f'Пользователь {id_file[:11]} превысил лимит времени на аудио')
-        return 'Ты превысил лимит времени на аудио, попробуй позже или напиши администратору бота'
+        return 'Ты превысил лимит времени на аудио, посмотри свои минуты в профиле /menu'
     transcript_text = await asyncio.to_thread(transcribe_file, token, id_file, duration)
     if transcript_text[:3] == 'new':
         await bot.send_message(chat_id='7281169403', text=transcript_text)
