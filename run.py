@@ -12,12 +12,13 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message
 from aiogram.filters import Filter
 from aiogram.filters.command import Command
+from aiogram.filters.logic import or_f
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton, FSInputFile, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import BigInteger, select, update
+from sqlalchemy import BigInteger, select, update, delete
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy import func
@@ -25,16 +26,17 @@ from rev_ai import apiclient
 from moviepy.editor import VideoFileClip
 
 ADMINS = [7281169403]
-API_TOKEN = '7658777452:AAHUmMy3ROkwhmJpXlzZb3p2H5HRRcoWv5c'
+API_TOKEN = '6601937260:AAFo1-zXe_V9CgKek7b0LpE70MDjXyGsx18'
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
-tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzhoq6VZ7ZpLf4vLI4dyxYvvbHec', '02LIXJoYtq24oWGQ_-8Outb3c9C9kuOZZOF-Eg99NmlZ_-IDT5_8p0PI9OSq6_GtqSenZz0tlwSXcAYFWuS51L8O6lMBg', '02R1KhYQKOHOdva1jgHlN7qZuYFPqDpxDyaH033WYIBxJbbi4cUks79ipMe1tnbAQuyahN-LfmlsL3yAx1CinJiP5d3Ro']
-
+tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzhoq6VZ7ZpLf4vLI4dyxYvvbHec', '02LIXJoYtq24oWGQ_-8Outb3c9C9kuOZZOF-Eg99NmlZ_-IDT5_8p0PI9OSq6_GtqSenZz0tlwSXcAYFWuS51L8O6lMBg']
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 ogg_path = os.path.join(DATA_DIR, 'add.ogg')
-db_path = os.path.join(DATA_DIR, 'db')
+db_path = os.path.join(DATA_DIR, 'db.sqlite3')
+BASE_DATA_PATH = os.path.join(os.path.dirname(__file__), 'data')
+
 
 
 # Создаем папки, если они не существуют
@@ -74,9 +76,11 @@ class User(Base):
     __tablename__ = 'users'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    tg_id = mapped_column(BigInteger)
-    username: Mapped[str] = mapped_column(default='Noname')
-    time: Mapped[int] = mapped_column(default=100000)
+    tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    username: Mapped[str] = mapped_column(default='Noname', nullable=False)
+    time: Mapped[int] = mapped_column(default=1800, nullable=False)
+    pro: Mapped[int] = mapped_column(default=0, nullable=False)
+
 
 
 async def async_main():
@@ -97,26 +101,35 @@ async def create_user(tg_id, username):
 async def add_usage(tg_id, usage):
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.tg_id == tg_id))
-        if user is None:
-            return True # Или создай нового пользователя
+        if user.pro==1:
+            pass
+        else:
+            if user.time < usage:
+                return True
 
-        if user.time < usage:
-            return True
-
-        user.time -= usage
-        await session.commit()
-
-
-async def add_banned_user(tg_id):
-    async with async_session() as session:
-        await session.execute(update(User).where(User.tg_id == tg_id).values(username=User.username + '_BAN'))
-        await session.commit()
+            user.time -= usage
+            await session.commit()
 
 
 async def get_users():
     async with async_session() as session:
         users = await session.scalars(select(User))
         return users
+    
+
+async def get_user(tg_id):
+    async with async_session() as session:
+        return await session.scalar(select(User).where(User.tg_id == tg_id))
+
+
+async def get_time(tg_id):
+    user = await get_user(tg_id)
+    return user.time if user else None
+
+
+async def check_pro(tg_id):
+    user = await get_user(tg_id)
+    return int(user.pro) if user else None
     
 
 def get_duration_pydub(file_path):
@@ -127,9 +140,73 @@ def get_duration_pydub(file_path):
 @dp.message(Command('start'))
 async def start(message: Message):
     await message.answer(
-        'Нет Telegram premium🚀? Не беда! Просто Отправь мне аудио или видео(кружочек) для перевода в текстовый вариант 📝 😉')
-    #  reply_markup=InlineKeyboardBuilder().row(InlineKeyboardButton(text='Мой канал', url='https://t.me/bots884')).as_markup())
+        'Нет Telegram premium🚀? Не беда! Просто Отправь мне аудио или видео(кружочек) для перевода в текстовый вариант 📝 😉', 
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Меню')]], resize_keyboard=True))
     await create_user(message.from_user.id, str(message.from_user.username))
+
+
+@dp.message(or_f(Command("menu"), F.text.lower() == 'меню'))
+async def menu_or_balance_handler(message: Message):
+    user = await get_user(message.from_user.id)
+
+    if not user:
+        await message.answer("Не удалось найти ваш профиль. Нажмите /start для регистрации.")
+        return
+
+    pro = int(user.pro)
+    text = "💼 Главное меню\n"
+    if pro:
+        text += "\n🟢 У вас активен PRO-доступ. Количество минут не ограничено"
+    else:
+        times = user.time
+        text += f"\n🔴 У вас обычный доступ.\nУ вас осталось в этом месяце: {times//60} мин. {times%60} сек. \n\n❗Чтобы получить PRO — нажмите /buy\n\n В бесплатной версии дается 30 минут каждый месяц 1-го числа. 🤑 PRO доступ - доступ к переводу голосовых в текст без ограничений по времени и длительности аудио. Стоимость 40 р/мес"
+
+    await message.answer(text)
+
+
+@dp.message(Command('buy'))
+async def buy_pro(message: Message):
+    await message.answer('Пока что функция быстрой оплаты в разработке, для оплаты напиши мне в лс @vikwo2pps')
+
+async def find_user_by_id_or_username(identifier: str):
+    async with async_session() as session:
+        # Если передан числовой ID
+        if identifier.isdigit():
+            user = await session.scalar(select(User).where(User.tg_id == int(identifier)))
+        else:
+            # Поиск по username (без @)
+            username = identifier.lstrip('@')
+            user = await session.scalar(select(User).where(User.username == username))
+        return user
+
+
+@dp.message(AdminProtect(), Command("pro_add"))
+async def pro_add(message: Message):
+    args = message.text
+    args = args.replace('/pro_add ', '')
+    user = await find_user_by_id_or_username(args)
+    if not user:
+        await message.answer(f"Пользователь {args} не найден в базе.")
+        return
+    async with async_session() as session:
+        await session.execute(update(User).where(User.tg_id == user.tg_id).values(pro=1))
+        await session.commit()
+    await message.answer(f"PRO подписка выдана пользователю {user.username} ({user.tg_id}).")
+
+
+@dp.message(AdminProtect(), Command("pro_remove"))
+async def pro_remove(message: Message):
+    args = message.text
+    args = args.replace('/pro_remove ', '')
+    user = await find_user_by_id_or_username(args)
+    if not user:
+        await message.answer(f"Пользователь {args} не найден в базе.")
+        return
+    async with async_session() as session:
+        await session.execute(update(User).where(User.tg_id == user.tg_id).values(pro=0))
+        await session.commit()
+    await message.answer(f"PRO подписка снята с пользователя {user.username} ({user.tg_id}).")
+
 
 
 @dp.message(AdminProtect(), Command('newsletter'))
@@ -152,9 +229,6 @@ async def get_admin(message: Message, state: FSMContext, bot: Bot):
             await bot.send_message(chat_id=user.tg_id, text=message.text)
         except:
             i += 1
-            # await delete_banned_user(user.tg_id)
-            if user.username[-3:] != 'BAN':
-                await add_banned_user(user.tg_id)
     await message.answer(f'Рассылка завершена. Пользователей, заблокировавших бота: {i}')
     await state.clear()
 
@@ -162,13 +236,40 @@ async def get_admin(message: Message, state: FSMContext, bot: Bot):
 @dp.message(AdminProtect(), Command('users'))
 async def how_many(message: Message, bot: Bot):
     async with async_session() as session:
-        # Количество пользователей в базе данных
+        # Общее количество пользователей
         count_users = await session.scalar(select(func.count(User.id)))
+        
+        # Количество заблокировавших бота (по username с 'BAN')
         count_users_ban = await session.scalar(
             select(func.count(User.id)).where(User.username.ilike('%BAN%'))
         )
+        
+        # Количество пользователей с про подпиской
+        count_pro_users = await session.scalar(
+            select(func.count(User.id)).where(User.pro == 1)
+        )
+    
     await message.answer(
-        f'Количество активных пользователей: \n\nКоличество пользователей в базе данных: {count_users}\n Заблоктровали бота: {count_users_ban}\n\n Итого: {count_users - count_users_ban}')
+        f'📊 Статистика пользователей:\n\n'
+        f'👥 Всего в базе: {count_users}\n'
+        f'🔒 Заблокировали бота: {count_users_ban}\n'
+        f'💼 С про подпиской: {count_pro_users}\n\n'
+        f'✅ Активных пользователей: {count_users - count_users_ban}'
+    )
+
+
+@dp.message(AdminProtect(), Command('delete_banned'))
+async def delete_banned_users(message: Message):
+    async with async_session() as session:
+        # Удаляем всех пользователей с пометкой BAN
+        result = await session.execute(
+            delete(User).where(User.username.ilike('%BAN%'))
+        )
+        await session.commit()
+
+        deleted_count = result.rowcount or 0
+
+    await message.answer(f'Удалено пользователей с пометкой BAN: {deleted_count}')
 
 
 @dp.message(AdminProtect(), Command('tokens'))
@@ -206,34 +307,34 @@ async def full_edit_tokens(message: Message):
 @dp.message(AdminProtect(), Command('get_db'))
 async def get_db(message: Message, bot: Bot):
     database = FSInputFile(
-        os.path.abspath('db.sqlite3'),
+        os.path.abspath(db_path),
         filename='db.sqlite3'
     )
     await message.answer_document(database)
-    await message.answer(str(db_path))
+    
 
 
 async def download_file(session: aiohttp.ClientSession, file_url: str, id_file: str, file_extension: str):
     async with session.get(file_url) as response:
-        with open(f'/usr/src/app/data/{id_file}.{file_extension}', 'wb') as file:
+        with open(f'{BASE_DATA_PATH}/{id_file}.{file_extension}', 'wb') as file:
             file.write(await response.read())
 
 
 def transcribe_file(token: str, id_file: str, duration: int) -> str:
     global tokens
     if duration < 3:
-        main_audio = AudioSegment.from_file(f'/usr/src/app/data/{id_file}.ogg')
+        main_audio = AudioSegment.from_file(f'{BASE_DATA_PATH}/{id_file}.ogg')
         add_audio = AudioSegment.from_file(ogg_path)
         combined = main_audio + add_audio
-        combined.export(f'/usr/src/app/data/{id_file}.ogg', format='ogg')
+        combined.export(f'{BASE_DATA_PATH}/{id_file}.ogg', format='ogg')
     client = apiclient.RevAiAPIClient(token)
     job_options = {'language': 'ru'}
-    job = client.submit_job_local_file(f'/usr/src/app/data/{id_file}.ogg', **job_options)
+    job = client.submit_job_local_file(f'{BASE_DATA_PATH}/{id_file}.ogg', **job_options)
     while True:
         job_details = client.get_job_details(job.id)
         if job_details.status == 'transcribed':
             transcript_text = client.get_transcript_text(job.id)
-            os.remove(f'/usr/src/app/data/{id_file}.ogg')
+            os.remove(f'{BASE_DATA_PATH}/{id_file}.ogg')
             transcript_text = re.sub(r'Speaker \d+\s+', '', transcript_text)
             return transcript_text
         if job_details.status == 'failed':
@@ -254,14 +355,14 @@ async def download_and_transcribe(bot: Bot, file_id: str, token: str, id_file: s
         await download_file(session, file_path, id_file, file_extension)
 
     if file_extension == 'mp4':
-        video = VideoFileClip(f'/usr/src/app/data/{id_file}.mp4')
-        video.audio.write_audiofile(f'/usr/src/app/data/{id_file}.ogg')
+        video = VideoFileClip(f'{BASE_DATA_PATH}/{id_file}.mp4')
+        video.audio.write_audiofile(f'{BASE_DATA_PATH}/{id_file}.ogg')
         video.close()
-        os.remove(f'/usr/src/app/data/{id_file}.mp4')
-    duration = get_duration_pydub(f'/usr/src/app/data/{id_file}.ogg')
+        os.remove(f'{BASE_DATA_PATH}/{id_file}.mp4')
+    duration = get_duration_pydub(f'{BASE_DATA_PATH}/{id_file}.ogg')
     if await add_usage(id_file[:10], duration):
         await bot.send_message(chat_id='7281169403', text=f'Пользователь {id_file[:11]} превысил лимит времени на аудио')
-        return 'Ты превысил лимит времени на аудио, посмотри свои минуты в профиле /menu'
+        return 'Ты превысил лимит времени на аудио, попробуй позже или напиши администратору бота'
     transcript_text = await asyncio.to_thread(transcribe_file, token, id_file, duration)
     if transcript_text[:3] == 'new':
         await bot.send_message(chat_id='7281169403', text=transcript_text)
