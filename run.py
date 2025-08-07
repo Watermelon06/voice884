@@ -207,10 +207,11 @@ async def full_edit_tokens(message: Message):
 @dp.message(AdminProtect(), Command('get_db'))
 async def get_db(message: Message, bot: Bot):
     database = FSInputFile(
-        os.path.abspath(db_path),
+        os.path.abspath('db.sqlite3'),
         filename='db.sqlite3'
     )
     await message.answer_document(database)
+    await message.answer(str(db_path))
 
 
 async def download_file(session: aiohttp.ClientSession, file_url: str, id_file: str, file_extension: str):
