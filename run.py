@@ -31,15 +31,14 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzhoq6VZ7ZpLf4vLI4dyxYvvbHec', '02LIXJoYtq24oWGQ_-8Outb3c9C9kuOZZOF-Eg99NmlZ_-IDT5_8p0PI9OSq6_GtqSenZz0tlwSXcAYFWuS51L8O6lMBg', '02R1KhYQKOHOdva1jgHlN7qZuYFPqDpxDyaH033WYIBxJbbi4cUks79ipMe1tnbAQuyahN-LfmlsL3yAx1CinJiP5d3Ro']
 
-# Создаем папки, если они не существуют
-os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 ogg_path = os.path.join(DATA_DIR, 'add.ogg')
 db_path = os.path.join(DATA_DIR, 'db')
 
 
-
+# Создаем папки, если они не существуют
+os.makedirs(os.path.dirname(db_path), exist_ok=True)
 # Создаем файл базы данных, если он не существует
 if not os.path.exists(db_path):
     with open(db_path, 'w'):
