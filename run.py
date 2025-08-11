@@ -30,7 +30,7 @@ API_TOKEN = '6601937260:AAHHoZOntirOMryKbBsws5ukO9OqJpzyTuo'
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
-tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzhoq6VZ7ZpLf4vLI4dyxYvvbHec', '02LIXJoYtq24oWGQ_-8Outb3c9C9kuOZZOF-Eg99NmlZ_-IDT5_8p0PI9OSq6_GtqSenZz0tlwSXcAYFWuS51L8O6lMBg']
+tokens = ['02j2kY_UvdoL7WjGdXSyQ9MqLr9A-4oGoR6Z2JZt6BUh91471ctMr1FUD7oWGI-Kahzhoq6VZ7ZpLf4vLI4dyxYvvbHec', '02LIXJoYtq24oWGQ_-8Outb3c9C9kuOZZOF-Eg99NmlZ_-IDT5_8p0PI9OSq6_GtqSenZz0tlwSXcAYFWuS51L8O6lMBg', '02j61_VBQhxPGg21wPHh3hP_knvV2t2oshg3yc1Ci7SUfuMYSm-afV_VKUBq4lia530468ho0nPRyCYcNg92YhhR2kDg8', '02PIllMqo68kATt3yTO2fgQaX6GR93p5sfWp3MjHebCdWA82rSGKGeBc_emzWm10raufa_iEIq81d_r-5RycCMkN8bX-8']
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 ogg_path = os.path.join(DATA_DIR, 'add.ogg')
@@ -223,13 +223,25 @@ async def get_admin(message: Message, state: FSMContext, bot: Bot):
         return
 
     users = await get_users()
-    i = 0
-    for user in users:
-        try:
-            await bot.send_message(chat_id=user.tg_id, text=message.text)
-        except:
-            i += 1
-    await message.answer(f'Рассылка завершена. Пользователей, заблокировавших бота: {i}')
+    removed_count = 0
+    failed_count = 0
+
+    async with async_session() as session:
+        for user in users:
+            try:
+                await bot.send_message(chat_id=user.tg_id, text=message.text)
+            except Exception:
+                failed_count += 1
+                removed_count += 1
+                # Удаляем пользователя, который заблокировал бота
+                await session.execute(delete(User).where(User.tg_id == user.tg_id))
+        await session.commit()
+
+    await message.answer(
+        f'Рассылка завершена.\n'
+        f'Удалено пользователей: {removed_count}\n'
+        f'Не удалось отправить сообщений: {failed_count}'
+    )
     await state.clear()
 
 
@@ -239,11 +251,6 @@ async def how_many(message: Message, bot: Bot):
         # Общее количество пользователей
         count_users = await session.scalar(select(func.count(User.id)))
         
-        # Количество заблокировавших бота (по username с 'BAN')
-        count_users_ban = await session.scalar(
-            select(func.count(User.id)).where(User.username.ilike('%BAN%'))
-        )
-        
         # Количество пользователей с про подпиской
         count_pro_users = await session.scalar(
             select(func.count(User.id)).where(User.pro == 1)
@@ -252,24 +259,8 @@ async def how_many(message: Message, bot: Bot):
     await message.answer(
         f'📊 Статистика пользователей:\n\n'
         f'👥 Всего в базе: {count_users}\n'
-        f'🔒 Заблокировали бота: {count_users_ban}\n'
         f'💼 С про подпиской: {count_pro_users}\n\n'
-        f'✅ Активных пользователей: {count_users - count_users_ban}'
     )
-
-
-@dp.message(AdminProtect(), Command('delete_banned'))
-async def delete_banned_users(message: Message):
-    async with async_session() as session:
-        # Удаляем всех пользователей с пометкой BAN
-        result = await session.execute(
-            delete(User).where(User.username.ilike('%BAN%'))
-        )
-        await session.commit()
-
-        deleted_count = result.rowcount or 0
-
-    await message.answer(f'Удалено пользователей с пометкой BAN: {deleted_count}')
 
 
 @dp.message(AdminProtect(), Command('tokens'))
