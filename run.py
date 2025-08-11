@@ -26,7 +26,7 @@ from rev_ai import apiclient
 from moviepy.editor import VideoFileClip
 
 ADMINS = [7281169403]
-API_TOKEN = '6601937260:AAFo1-zXe_V9CgKek7b0LpE70MDjXyGsx18'
+API_TOKEN = '6601937260:AAHHoZOntirOMryKbBsws5ukO9OqJpzyTuo'
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
